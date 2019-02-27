@@ -6,13 +6,20 @@ from setuptools import (
 )
 
 extras_require = {
+    'bimini': [
+        "parsimonious>=0.8.1,<0.9.0",
+        "cytoolz>=0.9.0.1,<0.10",
+    ],
     'test': [
-        "pytest==3.3.2",
+        "pytest==4.3.0",
         "pytest-xdist",
         "tox>=2.9.1,<3",
+        "hypothesis==4.7.12",
     ],
     'lint': [
-        "flake8==3.4.1",
+        "mypy==0.670",
+        "flake8==3.7.7",
+        "flake8-bugbear==18.8.0",
         "isort>=4.2.15,<5",
         "pydocstyle>=3.0.0,<4",
     ],
@@ -36,23 +43,29 @@ extras_require['dev'] = (
     extras_require['doc']
 )
 
+install_requires = extras_require.pop('bimini')
+
+
+with open('README.md') as readme_file:
+    long_description = readme_file.read()
+
+
 setup(
-    name='<PYPI_NAME>',
+    name='bimini',
     # *IMPORTANT*: Don't manually change the version here. Use `make bump`, as described in readme
     version='0.1.0-alpha.0',
-    description="""<PYPI_NAME>: <SHORT_DESCRIPTION>""",
-    long_description_markdown_filename='README.md',
+    description="""bimini: An implementation of the Concise Streamable Serialization Scheme""",
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     author='Jason Carver',
     author_email='ethcalibur+pip@gmail.com',
-    url='https://github.com/ethereum/<REPO_NAME>',
+    url='https://github.com/ethereum/bimini',
     include_package_data=True,
-    install_requires=[
-        "eth-utils>=1,<2",
-    ],
+    install_requires=install_requires,
     setup_requires=['setuptools-markdown'],
     python_requires='>=3.6, <4',
     extras_require=extras_require,
-    py_modules=['<MODULE_NAME>'],
+    py_modules=['bimini'],
     license="MIT",
     zip_safe=False,
     keywords='ethereum',

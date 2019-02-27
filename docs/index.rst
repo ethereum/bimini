@@ -1,7 +1,7 @@
-<PROJECT_NAME>
+bimini
 ==============================
 
-<SHORT_DESCRIPTION>
+An implementation of the Concise Streamable Serialization Scheme
 
 Contents
 --------
@@ -9,7 +9,7 @@ Contents
 .. toctree::
     :maxdepth: 3
 
-    <MODULE_NAME>
+    bimini
     releases
 
 
