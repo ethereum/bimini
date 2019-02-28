@@ -3,6 +3,7 @@ import pytest
 from bimini.grammar import (
     ArrayType,
     BitType,
+    ByteType,
     ContainerType,
     ScalarType,
     TupleType,
@@ -12,6 +13,9 @@ from bimini.grammar import parse
 
 t_bit = BitType()
 t_bool = BitType(is_bool=True)
+t_byte = ByteType()
+t_bytes = ArrayType(t_byte)
+t_bytes32 = TupleType(t_byte, 32)
 t_uint8 = UnsignedIntegerType(8)
 t_scalar8 = ScalarType(8)
 t_uint16 = UnsignedIntegerType(16)
@@ -24,7 +28,10 @@ t_scalar256 = ScalarType(256)
     'type_str,expected',
     (
         ('bit', t_bit),
-        ('bool', t_bit),
+        ('bool', t_bool),
+        ('byte', t_byte),
+        ('bytes', t_bytes),
+        ('bytes32', t_bytes32),
         ('uint8', t_uint8),
         ('scalar8', t_scalar8),
         ('uint16', t_uint16),

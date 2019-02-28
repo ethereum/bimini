@@ -1,7 +1,8 @@
 import functools
 from typing import (
-    Any,
+    Optional,
     Tuple,
+    Union,
 )
 
 import parsimonious
@@ -12,10 +13,20 @@ from parsimonious import (
 from bimini.exceptions import (
     ParseError,
 )
+from bimini.types import (
+    ArrayType,
+    BaseType,
+    BitType,
+    ByteType,
+    ContainerType,
+    ScalarType,
+    TupleType,
+    UnsignedIntegerType,
+)
 
 
 grammar = parsimonious.Grammar(r"""
-type = basic_type / container_type / tuple_type / array_type / alias_type
+type = basic_type / alias_type / container_type / tuple_type / array_type
 
 container_type = container_types arrlist?
 container_types = zero_container / non_zero_container
@@ -38,12 +49,13 @@ bit_size = "8" / "16" / "24" / "32" / "40" / "48" / "56" / "64" / "72" / "80" / 
 base_integer_type = "uint" / "scalar"
 
 alias_type = alias_types arrlist?
-alias_types = "bool" / bytes_type / byte_type / bytesN_type
+alias_types = bool_type / bytesN_type / bytes_type / byte_type
+
+bytesN_type = bytes_type digits
 
 bool_type = "bool"
 bytes_type = "bytes"
 byte_type = "byte"
-bytesN_type = "bytes" digits
 
 arrlist = dynam_arr / const_arr
 dynam_arr = dynam_arr_comp any_arr_comp*
@@ -58,104 +70,20 @@ digits = ~"[1-9][0-9]*"
 """)
 
 
-class BaseType:
-    def __repr__(self) -> str:
-        return f'<{str(self)}>'
+ArrTypeMeta = Tuple[Union[ArrayType, TupleType], Optional[int]]
 
 
-class BitType(BaseType):
-    def __init__(self, is_bool=False):
-        self.is_bool = is_bool
-
-    def __eq__(self, other: Any) -> bool:
-        return isinstance(other, BitType) and self.is_bool is other.is_bool
-
-    def __str__(self) -> str:
-        if self.is_bool:
-            return 'bool'
-        else:
-            return 'bit'
-
-
-class UnsignedIntegerType(BaseType):
-    def __init__(self, bit_size: int):
-        self.bit_size = bit_size
-
-    def __eq__(self, other: Any) -> bool:
-        return isinstance(other, UnsignedIntegerType) and other.bit_size == self.bit_size
-
-    def __str__(self) -> str:
-        return f'uint{self.bit_size}'
-
-
-class ScalarType(BaseType):
-    def __init__(self, bit_size: int):
-        self.bit_size = bit_size
-
-    def __eq__(self, other: Any) -> bool:
-        return isinstance(other, ScalarType) and other.bit_size == self.bit_size
-
-    def __str__(self) -> str:
-        return f'scalar{self.bit_size}'
-
-
-class ContainerType(BaseType):
-    def __init__(self, element_types: Tuple[BaseType, ...]):
-        self.element_types = element_types
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ContainerType):
-            return False
-        elif len(self.element_types) != len(other.element_types):
-            return False
-        else:
-            return all(
-                mine == theirs
-                for mine, theirs
-                in zip(self.element_types, other.element_types)
-            )
-
-    def __str__(self) -> str:
-        return f'{"{"}{",".join((str(element_type) for element_type in self.element_types))}{"}"}'
-
-
-class TupleType(BaseType):
-    def __init__(self, item_type: BaseType, size: int):
-        self.size = size
-        self.item_type = item_type
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, TupleType):
-            return False
-        else:
-            return self.item_type == other.item_type and self.size == other.size
-
-    def __str__(self) -> str:
-        return f'{str(self.item_type)}[{self.size}]'
-
-
-class ArrayType(BaseType):
-    def __init__(self, item_type: BaseType):
-        self.item_type = item_type
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ArrayType):
-            return False
-        else:
-            return self.item_type == other.item_type
-
-    def __str__(self) -> str:
-        return f'{str(self.item_type)}[]'
-
-
-def _reduce_arrlist(item_type, arr_type_meta):
+def _reduce_arrlist(item_type: BaseType,
+                    arr_type_meta: ArrTypeMeta,
+                    ) -> Union[TupleType, ArrayType]:
     arr_type, arr_size = arr_type_meta
     if arr_type is TupleType:
         return TupleType(item_type, arr_size)
     elif arr_type is ArrayType:
         if arr_size is not None:
             raise Exception("INVALID")
-        return ArrayType(item_type)
+        else:
+            return ArrayType(item_type)
     else:
         raise Exception('INVARIANT')
 
@@ -164,26 +92,6 @@ class NodeVisitor(parsimonious.NodeVisitor):
     """
     Parsimonious node visitor which performs both parsing of type strings and
     post-processing of parse trees.  Parsing operations are cached.
-
-    - container_type
-    - tuple_type
-    - array_type
-    - non_zero_container
-    - zero_container
-    - basic_type
-    - basic_types
-    - bit_size
-    - base_integer_type
-    - integer_types
-    - alias_type
-    - alias_types
-    - arrlist
-    - dynam_arr
-    - const_arr
-    - any_arr_comp
-    - dynam_arr_comp
-    - const_arr_comp
-    - digits
     """
     grammar = grammar
 
@@ -264,17 +172,22 @@ class NodeVisitor(parsimonious.NodeVisitor):
     byte_type = "byte"
     bytesN_type = "bytes" digits
     """
+    def visit_alias_type(self, node, visited_children):
+        return self._maybe_reduce_arrlist(node, visited_children)
+
     def visit_bool_type(self, node, visited_children):
         return BitType(is_bool=True)
 
-    def visit_bytes_type(self, node, visited_children):
-        return ArrayType(UnsignedIntegerType(bit_size=8))
-
     def visit_byte_type(self, node, visited_children):
-        return UnsignedIntegerType(bit_size=8)
+        return ByteType()
+
+    def visit_bytes_type(self, node, visited_children):
+        return ArrayType(ByteType())
 
     def visit_bytesN_type(self, node, visited_children):
-        assert False
+        # we discard the parsed type to replace with just a `byte` type.
+        _, size = visited_children
+        return TupleType(ByteType(), size)
 
     ############
 
