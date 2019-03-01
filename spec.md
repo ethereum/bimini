@@ -72,6 +72,9 @@ representation of the given value.
 - `0x00` if the bit is **not** set.
 
 
+> TODO: Consider specialized `bitfield` alias which can natively be deserialized into a sequence of bits (rather than bytes)
+
+
 ```python
 def serialize_bit(value: bool) -> bytes:
     if value:

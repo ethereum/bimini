@@ -18,7 +18,11 @@ from bimini.types import (
     BaseType,
     BitType,
     ByteType,
+    BytesType,
+    FixedBytesType,
+    BoolType,
     ContainerType,
+    OptionalType,
     ScalarType,
     TupleType,
     UnsignedIntegerType,
@@ -28,27 +32,27 @@ from bimini.types import (
 grammar = parsimonious.Grammar(r"""
 type = basic_type / alias_type / container_type / tuple_type / array_type
 
-container_type = container_types arrlist?
+container_type = container_types arrlist? optional?
 container_types = zero_container / non_zero_container
-tuple_type = type const_arr
-array_type = type dynam_arr
+tuple_type = type const_arr optional?
+array_type = type dynam_arr optional?
 
 non_zero_container = "{" type next_type* "}"
 next_type = "," type
 
 zero_container = "{}"
 
-basic_type = basic_types arrlist?
+optional = "?"
+
+basic_type = basic_types arrlist? optional?
 basic_types = integer_types / bit_type
 bit_type = "bit"
 
 integer_types = base_integer_type bit_size
-bit_size = "8" / "16" / "24" / "32" / "40" / "48" / "56" / "64" / "72" / "80" / "88" / "96" /
-           "104" / "112" / "120" / "128" / "136" / "144" / "152" / "160" / "168" / "176" /
-           "184" / "192" / "200" / "208" / "216" / "224" / "232" / "240" / "248" / "256"
+bit_size = ~"[1-9][0-9]*"
 base_integer_type = "uint" / "scalar"
 
-alias_type = alias_types arrlist?
+alias_type = alias_types arrlist? optional?
 alias_types = bool_type / bytesN_type / bytes_type / byte_type
 
 bytesN_type = bytes_type digits
@@ -96,11 +100,16 @@ class NodeVisitor(parsimonious.NodeVisitor):
     grammar = grammar
 
     def _maybe_reduce_arrlist(self, node, visited_children):
-        base_type, arr_comps = visited_children
+        base_type, arr_comps, optional = visited_children
         if arr_comps is None:
-            return base_type
+            value_type = base_type
         else:
-            return functools.reduce(_reduce_arrlist, reversed(arr_comps), base_type)
+            value_type = functools.reduce(_reduce_arrlist, reversed(arr_comps), base_type)
+
+        if optional:
+            return optional(value_type)
+        else:
+            return value_type
 
     def visit_container_type(self, node, visited_children):
         return self._maybe_reduce_arrlist(node, visited_children)
@@ -119,6 +128,9 @@ class NodeVisitor(parsimonious.NodeVisitor):
         _, first, rest, _ = visited_children
 
         return ContainerType((first,) + rest)
+
+    def visit_optional(self, node, visited_children):
+        return OptionalType
 
     ############
     def _visit_any_arr(self, node, visited_children):
@@ -146,7 +158,10 @@ class NodeVisitor(parsimonious.NodeVisitor):
         return self._maybe_reduce_arrlist(node, visited_children)
 
     def visit_bit_size(self, node, visited_children):
-        return int(node.text)
+        bit_size = int(node.text)
+        if bit_size % 8 != 0:
+            raise ParseError("Invalid bit_size.  Must be multiple of 8")
+        return bit_size
 
     def visit_base_integer_type(self, node, visited_children):
         if node.text == 'uint':
@@ -162,35 +177,26 @@ class NodeVisitor(parsimonious.NodeVisitor):
 
     def visit_bit_type(self, node, visited_children):
         return BitType()
-    ############
-    """
-    alias_type = alias_types arrlist?
-    alias_types = bool_type / bytes_type / byte_type / bytesN_type
 
-    bool_type = "bool"
-    bytes_type = "bytes"
-    byte_type = "byte"
-    bytesN_type = "bytes" digits
-    """
+    ############
     def visit_alias_type(self, node, visited_children):
         return self._maybe_reduce_arrlist(node, visited_children)
 
     def visit_bool_type(self, node, visited_children):
-        return BitType(is_bool=True)
+        return BoolType()
 
     def visit_byte_type(self, node, visited_children):
         return ByteType()
 
     def visit_bytes_type(self, node, visited_children):
-        return ArrayType(ByteType())
+        return BytesType()
 
     def visit_bytesN_type(self, node, visited_children):
         # we discard the parsed type to replace with just a `byte` type.
         _, size = visited_children
-        return TupleType(ByteType(), size)
+        return FixedBytesType(size)
 
     ############
-
     def visit_digits(self, node, visited_children):
         return int(node.text)
 

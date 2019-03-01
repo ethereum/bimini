@@ -1,21 +1,25 @@
 import pytest
 
-from bimini.grammar import (
+from bimini.types import (
     ArrayType,
     BitType,
+    BoolType,
     ByteType,
+    BytesType,
+    FixedBytesType,
     ContainerType,
     ScalarType,
+    OptionalType,
     TupleType,
     UnsignedIntegerType,
 )
 from bimini.grammar import parse
 
 t_bit = BitType()
-t_bool = BitType(is_bool=True)
+t_bool = BoolType()
 t_byte = ByteType()
-t_bytes = ArrayType(t_byte)
-t_bytes32 = TupleType(t_byte, 32)
+t_bytes = BytesType()
+t_bytes32 = FixedBytesType(32)
 t_uint8 = UnsignedIntegerType(8)
 t_scalar8 = ScalarType(8)
 t_uint16 = UnsignedIntegerType(16)
@@ -121,5 +125,16 @@ t_cont_uint8_cont_uint_16_scalar16 = ContainerType((
     ),
 )
 def test_parsing_container_type_strings(type_str, expected):
+    result = parse(type_str)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    'type_str,expected',
+    (
+        ('uint8?', OptionalType(t_uint8)),
+    ),
+)
+def test_parsing_optional_types(type_str, expected):
     result = parse(type_str)
     assert result == expected

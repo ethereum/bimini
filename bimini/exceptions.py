@@ -4,3 +4,11 @@ class ParseError(Exception):
 
 class ValidationError(Exception):
     pass
+
+
+class DecodingError(Exception):
+    pass
+
+
+class EncodingError(Exception):
+    pass

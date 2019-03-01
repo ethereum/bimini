@@ -14,18 +14,32 @@ from cytoolz import curry
 from bimini._utils.decorators import (
     to_tuple,
 )
+from bimini.decoders import (
+    decode_bool,
+)
 from bimini.exceptions import (
     ParseError,
 )
+
+
+# TODO: combine with decoders
+
 
 LOW_MASK = 2**7 - 1
 HIGH_MASK = 2**7
 
 
+def _read_exact(num_bytes: int, stream: IO[bytes]) -> bytes:
+    data = stream.read(num_bytes)
+    if len(data) != num_bytes:
+        raise ParseError(f"Insufficient bytes in stream: needed {num_bytes},  got {len(data)}")
+    return data
+
+
 def _validate_bit_size(bit_size: int) -> None:
     # TODO: extract
-    assert bit_size % 8 == 8
-    assert 0 <= bit_size <= 256
+    assert bit_size % 8 == 0
+    assert 8 <= bit_size
 
 
 @to_tuple
@@ -50,15 +64,11 @@ def _parse_unsigned_leb128(bit_size: int, stream: IO[bytes]) -> Iterable[int]:
             break
 
 
-def _read_exact(num_bytes: int, stream: IO[bytes]) -> bytes:
-    data = stream.read(num_bytes)
-    if len(data) != num_bytes:
-        raise ParseError(f"Insufficient bytes in stream: needed {num_bytes},  got {len(data)}")
+def parse_bool(stream: IO[bytes]) -> bool:
+    byte = _read_exact(1, stream)
+    return decode_bool(byte)
 
 
-#
-# Scalars
-#
 @curry
 def parse_scalar(bit_size: int, stream: IO[bytes]) -> int:
     """
@@ -75,8 +85,8 @@ def parse_scalar(bit_size: int, stream: IO[bytes]) -> int:
 @curry
 def parse_uint(bit_size: int, stream: IO[bytes]) -> int:
     _validate_bit_size(bit_size)
-    data = _read_exact(bit_size // 8)
-    return int.from_bytes(data, 'litte')
+    data = _read_exact(bit_size // 8, stream)
+    return int.from_bytes(data, 'little')
 
 
 @curry
@@ -90,30 +100,33 @@ def parse_bytes(stream: IO[bytes]) -> bytes:
     return parse_fixed_bytes(length, stream)
 
 
+# TODO: use TypeVar to retain type data
 ParseFn = Callable[[IO[bytes]], Any]
 
 
-#
-# Array
-#
 @curry
-def parse_array(item_parser: ParseFn, stream: IO[bytes]) -> Tuple[Any, ...]:
-    length = parse_scalar(32, stream)
-    return _parse_array(length, item_parser, stream)
+def parse_container(element_parsers: Tuple[ParseFn, ...], stream: IO[bytes]) -> Tuple[Any, ...]:
+    return _parse_container(element_parsers, stream)
 
 
 @to_tuple
-def _parse_array(length: int, item_parser: ParseFn, stream: IO[bytes]) -> Iterable[Any]:
+def _parse_container(element_parsers: Tuple[ParseFn, ...], stream: IO[bytes]) -> Tuple[Any, ...]:
+    for parser in element_parsers:
+        yield parser(stream)
+
+
+@curry
+def parse_tuple(length: int, item_parser: ParseFn, stream: IO[bytes]) -> Tuple[Any, ...]:
+    return _parse_tuple(length, item_parser, stream)
+
+
+@to_tuple
+def _parse_tuple(length: int, item_parser: ParseFn, stream: IO[bytes]) -> Iterable[Any]:
     for _ in range(length):
         yield item_parser(stream)
 
 
 @curry
-def parse_tuple(element_parsers: Tuple[ParseFn, ...], stream: IO[bytes]) -> Tuple[Any, ...]:
-    return _parse_tuple(element_parsers, stream)
-
-
-@to_tuple
-def _parse_tuple(element_parsers: Tuple[ParseFn, ...], stream: IO[bytes]) -> Tuple[Any, ...]:
-    for parser in element_parsers:
-        yield parser(stream)
+def parse_array(item_parser: ParseFn, stream: IO[bytes]) -> Tuple[Any, ...]:
+    length = parse_scalar(32, stream)
+    return _parse_tuple(length, item_parser, stream)
