@@ -30,6 +30,10 @@ We define the following aliases which **MUST** be supported.
 - `bytesN -> byte[N]`
 - `bool -> bit`
 
+### Optionals
+
+- `<type>?`: Any type can be marked as *optional*
+
 
 ## Serialization
 

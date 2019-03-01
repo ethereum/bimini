@@ -133,6 +133,9 @@ def test_parsing_container_type_strings(type_str, expected):
     'type_str,expected',
     (
         ('uint8?', OptionalType(t_uint8)),
+        ('byte?', OptionalType(t_byte)),
+        ('uint8?[]', ArrayType(OptionalType(t_uint8))),
+        ('uint8[]?', OptionalType(ArrayType(t_uint8))),
     ),
 )
 def test_parsing_optional_types(type_str, expected):

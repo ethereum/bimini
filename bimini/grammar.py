@@ -30,9 +30,10 @@ from bimini.types import (
 
 
 grammar = parsimonious.Grammar(r"""
-type = basic_type / alias_type / container_type / tuple_type / array_type
+type = types optional?
+types = basic_type / alias_type / container_type / tuple_type / array_type
 
-container_type = container_types arrlist? optional?
+container_type = container_types optional? arrlist?
 container_types = zero_container / non_zero_container
 tuple_type = type const_arr optional?
 array_type = type dynam_arr optional?
@@ -44,7 +45,7 @@ zero_container = "{}"
 
 optional = "?"
 
-basic_type = basic_types arrlist? optional?
+basic_type = basic_types optional? arrlist?
 basic_types = integer_types / bit_type
 bit_type = "bit"
 
@@ -52,7 +53,7 @@ integer_types = base_integer_type bit_size
 bit_size = ~"[1-9][0-9]*"
 base_integer_type = "uint" / "scalar"
 
-alias_type = alias_types arrlist? optional?
+alias_type = alias_types optional? arrlist?
 alias_types = bool_type / bytesN_type / bytes_type / byte_type
 
 bytesN_type = bytes_type digits
@@ -100,11 +101,22 @@ class NodeVisitor(parsimonious.NodeVisitor):
     grammar = grammar
 
     def _maybe_reduce_arrlist(self, node, visited_children):
-        base_type, arr_comps, optional = visited_children
-        if arr_comps is None:
-            value_type = base_type
+        base_type, optional, arr_comps = visited_children
+
+        if optional:
+            declared_type = optional(base_type)
         else:
-            value_type = functools.reduce(_reduce_arrlist, reversed(arr_comps), base_type)
+            declared_type = base_type
+
+        if arr_comps is None:
+            value_type = declared_type
+        else:
+            value_type = functools.reduce(_reduce_arrlist, reversed(arr_comps), declared_type)
+
+        return value_type
+
+    def visit_type(self, node, visited_children):
+        value_type, optional = visited_children
 
         if optional:
             return optional(value_type)
